@@ -1,0 +1,452 @@
+---
+title: "Reproducible Research: Course Project 2"
+author: "Paul Skomsvold"
+date: "May 15, 2016"
+output: html_document
+keep_md: true
+---
+
+## The economic and public health consequences of severe weather events in the United States: 1950 - 2011
+
+## Synopsis
+
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. Many severe events can result in fatalities, injuries, and property damage, and preventing such outcomes to the extent possible is a key concern.
+
+This report uses data from the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database to determine public health and economic consequences of severe weather events in the United States to answer the following questions:
+
+* Which types of weather events are most harmful with respect to public health?
+
+* Which types of weather events have the greatest economic consequences?
+
+Public health impact was measured as the total number of injuries and fatalities associated with each type of weather event from years 1950 to 2011. Economic impact was was measured as the sum of all property damage and crop damage associated with each type of weather event from 1950 to 2011. In this report, public health consequences were reported only for 10 weather events with the highest numbers of fatalities/injuries. Economic consequences were reported only for 5 weather events with the greatest amount of total damage (property and crop combined).
+
+## About the data
+The NOAA's storm database provides information on the characteristics and location of major storms and weather events in the United States from 1950 to 2011, as well as information on injuries, fatalities, and economic damage associated with these events.  Data come from the National Weather Service, who receive information from a variety of sources including emergency management professionals, law enforcement officials, the insurance industry, damage surveys, and the general public. Results from the NOAA's storm database should be interpreted with caution as data come from disparate sources and have not all been verified by the National Weather Service. 
+
+Additional information about the data is available from the [National Weather Service](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+
+The following variables were used in this analysis:
+
+* EVTYPE: Weather event type
+* FATALITIES: The number of fatalities caused by a weather event
+* INJURIES: The number of injuries caused by a weather event
+* PROPDMG: Monetary value of property damage caused by a weather event
+* PROPDMGEXP: Exponent to be applied to the value of PROPDMG
+* CROPDMG: Monetary value of crop damage caused by a weather event
+* CROPDMGEXP: Exponent to be applied to the value of CROPDMG
+
+## Load packages
+
+This report utilized the following add-on packages in R: **knitr**, **ggplot2**, 
+and **reshape2**
+
+```{r, echo = TRUE}
+library(knitr)
+library(ggplot2)
+library(reshape2)
+```
+
+## Download data
+
+The data used in this report were downloaded on Sunday, May 15 through the R Studio 
+interface.
+
+```{r, echo = TRUE, cache = TRUE}
+download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2", "repdata_Fdata_StormData.csv.bz2")
+```
+
+Data can also be downloaded from the following link: [Storm Data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2)
+ 
+## Data processing
+
+Data were loaded into R Studio using read.csv() and bzfile(). 
+
+```{r, echo=TRUE, cache=TRUE}
+data <- read.csv(bzfile("repdata_Fdata_StormData.csv.bz2"))
+```
+
+Basic information about the data:
+
+```{r, echo=TRUE}
+dim(data)
+head(data)
+str(data)
+summary(data)
+```
+
+The original data file contained 985 individual weather event categories to classify 
+the 902,297 events in the data file. A significant amount of time was dedicated 
+to cleaning storm event type categories and aggregating them into the 48 categories
+listed on page 6 of the [Storm Data Codebook](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+
+In order to do this, event types (EVTYPE) were converted to lower case format and grep()
+and grepl() were used to replace text strings that contained keywords. For example,
+108 unique strings containing "tstm" or "thunderstorm" that did not also contain 
+"marine" were reclassified into one category: "thunderstorm wind". While some 
+misclassification may have occurred, these edits made measures of public health 
+and economic consequences of general weather events clearer than if the original 
+categories were used.
+
+```{r, echo=TRUE, cache=TRUE}
+##Convert EVTYPE to lower case format
+data$EVTYPE <- tolower(data$EVTYPE)
+##Cleanup/normalize EVTYPE
+###Avalanche
+data[grep("avalance", data$EVTYPE), "EVTYPE"] <- "avalanche"
+###Thunderstorm wind
+data[grepl("wind", data$EVTYPE) & !grepl("marine", data$EVTYPE) & 
+       grepl("thunderstorm|tunderstorm|tunderstrom|thunderstrom|thundertsorm", data$EVTYPE), 
+     "EVTYPE"] <- "thunderstorm wind"
+data[grepl("tstm|thunderstorm", data$EVTYPE) & !grepl("marine", data$EVTYPE), "EVTYPE"] <- "thunderstorm wind"
+data[grepl("thunderstorm", data$EVTYPE) & grepl("wins|w inds|damage|severe", data$EVTYPE), "EVTYPE"] <- "thunderstorm wind"
+data[grep("thunderstormw", data$EVTYPE), "EVTYPE"] <- "thunderstorm wind"
+###Blow-out tides
+data[grep("blow-out tide", data$EVTYPE), "EVTYPE"] <- "blow-out tides"
+###High tides
+data[grep("high tide", data$EVTYPE), "EVTYPE"] <- "high tides"
+data[grepl("high", data$EVTYPE) & grepl("water|seas", data$EVTYPE), "EVTYPE"] <- "high tides"
+###High surf
+data[grep("surf|rogue wave", data$EVTYPE), "EVTYPE"] <- "high surf"
+data[grepl("high|heavy|rough", data$EVTYPE) & grepl("seas|swells|waves", data$EVTYPE), "EVTYPE"] <- "high surf"
+###Blizzard
+data[grep("blizzard", data$EVTYPE), "EVTYPE"] <- "blizzard"
+###Coastal flood
+data[grepl("coastal|beach", data$EVTYPE) & grepl("flood|surge|erosion", data$EVTYPE), "EVTYPE"] <- "coastal flood"
+data[grep("beach erosin", data$EVTYPE), "EVTYPE"] <- "coastal flood"
+###Coastal storm
+data[grep("coastalstorm", data$EVTYPE), "EVTYPE"] <- "coastal storm"
+###Freezing fog
+data[grepl("fog", data$EVTYPE) & grepl("cold|ice", data$EVTYPE), "EVTYPE"] <- "freezing fog"
+###Dense fog
+data[grep("patchy dense fog", data$EVTYPE), "EVTYPE"] <- "dense fog"
+###Debris flow
+data[grep("mud", data$EVTYPE), "EVTYPE"] <- "debris flow"
+data[grepl("landslide|landslump|rock slide", data$EVTYPE), "EVTYPE"] <- "debris flow"
+###Fog
+data[grep("vog", data$EVTYPE), "EVTYPE"] <- "fog"
+###Dense smoke
+data[grep("smoke", data$EVTYPE), "EVTYPE"] <- "dense smoke"
+###Drought
+data[grep("drought", data$EVTYPE), "EVTYPE"] <- "drought"
+data[grep("unseasonably dry", data$EVTYPE), "EVTYPE"] <- "drought"
+data[grepl("dry", data$EVTYPE) & !grepl("microburst", data$EVTYPE), "EVTYPE"] <- "drought"
+data[grep("driest month", data$EVTYPE), "EVTYPE"] <- "drought"
+###Dust storm
+data[grepl("dust", data$EVTYPE) & !grepl("devil|devel", data$EVTYPE), 
+     "EVTYPE"] <- "dust storm"
+###Dust devil
+data[grep("dust devel", data$EVTYPE), "EVTYPE"] <- "dust devil"
+###Excessive heat
+data[grepl("heat", data$EVTYPE) & !grepl("^heat$", data$EVTYPE), "EVTYPE"] <- "excessive heat"
+data[grepl("warm", data$EVTYPE) & !grepl("weather", data$EVTYPE), "EVTYPE"] <- "excessive heat"
+data[grepl("record warmth|record high", data$EVTYPE), "EVTYPE"] <- "excessive heat"
+data[grep("hot", data$EVTYPE), "EVTYPE"] <- "excessive heat"
+data[grep("high temperature record", data$EVTYPE), "EVTYPE"] <- "excessive heat"
+###Flash flood
+data[grep("flash", data$EVTYPE), "EVTYPE"] <- "flash flood"
+data[grep("rapidly rising water", data$EVTYPE), "EVTYPE"] <- "flash flood"
+###Frost/freeze
+data[grep("frost|freeze", data$EVTYPE), 
+     "EVTYPE"] <- "frost/freeze"
+data[grepl("ice|icy", data$EVTYPE) & grepl("black|road|roads|patchy", data$EVTYPE), "EVTYPE"] <- "frost/freeze"
+data[grep("^ice$", data$EVTYPE), "EVTYPE"] <- "frost/freeze"
+data[grep("freezing drizzle and freezing", data$EVTYPE), "EVTYPE"] <- "frost/freeze"
+data[grep("hypothermia|hyperthermia", data$EVTYPE), "EVTYPE"] <- "frost/freeze"
+data[grep("record low", data$EVTYPE), "EVTYPE"] <- "frost/freeze"
+###Waterspout
+data[grep("waterspout|water spout", data$EVTYPE), "EVTYPE"] <- "waterspout"
+###Ice storm
+data[grep("ice pellets", data$EVTYPE), "EVTYPE"] <- "ice storm"
+data[grep("glaze", data$EVTYPE), "EVTYPE"] <- "ice storm"
+###Funnel cloud
+data[grep("funnel", data$EVTYPE), "EVTYPE"] <- "funnel cloud"
+data[grep("wall cloud", data$EVTYPE), "EVTYPE"] <- "funnel cloud"
+###Cold/wind chill
+data[grep("^cold$", data$EVTYPE), "EVTYPE"] <- "cold/wind chill"
+data[grep("^wind chill$", data$EVTYPE), "EVTYPE"] <- "cold/wind chill"
+data[grep("^low wind chill$", data$EVTYPE), "EVTYPE"] <- "cold/wind chill"
+data[grepl("cold", data$EVTYPE) & 
+       grepl("air|weather|temperature|temperatures|wet|winds", data$EVTYPE), "EVTYPE"] <- "cold/wind chill"
+data[grep("low temperature", data$EVTYPE), "EVTYPE"] <- "cold/wind chill"
+###Extreme cold/wind chill
+data[grepl("cold", data$EVTYPE) & 
+       grepl("excessive|extreme|severe|bitter|unusually|extended|prolong|unseasonably|unseasonable|record", data$EVTYPE), "EVTYPE"] <- "extreme cold/wind chill"
+data[grepl("cool", data$EVTYPE) & 
+       grepl("record|low", data$EVTYPE), "EVTYPE"] <- "extreme cold/wind chill"
+data[grepl("temp", data$EVTYPE) & 
+       grepl("record|low|unseasonal", data$EVTYPE), "EVTYPE"] <- "extreme cold/wind chill"
+###Heavy snow
+data[grepl("snow", data$EVTYPE) & 
+       grepl("heavy|squall|accumulation|accumulated|squalls|advisory", data$EVTYPE), "EVTYPE"] <- "heavy snow" 
+ data[grep("snowfall record", data$EVTYPE), "EVTYPE"] <- "heavy snow"
+data[grep("snowstorm", data$EVTYPE), "EVTYPE"] <- "heavy snow"
+###Sleet
+data[grepl("snow", data$EVTYPE) & grepl("rain|sleet|showers|precip", data$EVTYPE), "EVTYPE"] <- "sleet" 
+data[grep("freezing rain|sleet|freezing drizzle|freezing spray", data$EVTYPE), "EVTYPE"] <- "sleet"
+###Winter weather
+data[grepl("snow", data$EVTYPE) & !grepl("heavy", data$EVTYPE),
+     "EVTYPE"] <- "winter weather"
+data[grepl("winter", data$EVTYPE) & !grepl("storm", data$EVTYPE),
+     "EVTYPE"] <- "winter weather"
+data[grepl("mixed|monthly|normal", data$EVTYPE) & grepl("precip", data$EVTYPE),
+     "EVTYPE"] <- "winter weather"
+data[grepl("wet", data$EVTYPE) & grepl("month|weather|year|unseasonably|abnormally|cool", data$EVTYPE),
+     "EVTYPE"] <- "winter weather"
+data[grep("wintry mix", data$EVTYPE), "EVTYPE"] <- "winter weather"
+data[grep("cold wave", data$EVTYPE), "EVTYPE"] <- "winter weather"
+data[grep("cool spell", data$EVTYPE), "EVTYPE"] <- "winter weather"
+data[grep("unseasonably cool", data$EVTYPE), "EVTYPE"] <- "winter weather"
+data[grepl("ice", data$EVTYPE) & grepl("floes|jam", data$EVTYPE),
+     "EVTYPE"] <- "winter weather"
+###Winter storm
+data[grep("winter storm", data$EVTYPE), "EVTYPE"] <- "winter storm"
+###Lakeshore flood
+data[grep("lake flood", data$EVTYPE), "EVTYPE"] <- "lakeshore flood"
+###Flood
+data[grepl("flood", data$EVTYPE) & !grepl("^lakeshore flood$", data$EVTYPE)
+   & !grepl("^flash flood$", data$EVTYPE), "EVTYPE"] <- "flood"
+data[grep("fld|dam failure|dam break", data$EVTYPE), "EVTYPE"] <- "flood"
+###Hail
+data[grepl("hail", data$EVTYPE) & !grepl("tornadoes|tstm", data$EVTYPE), "EVTYPE"] <- "hail"
+###Heavy rain
+data[grepl("rain", data$EVTYPE) & !grepl("freezing|tstm", data$EVTYPE), "EVTYPE"] <- "heavy rain"
+data[grepl("heavy|excessive|extremely|record", data$EVTYPE) & 
+       grepl("wet|precipitation|precipatation|shower|wetness", data$EVTYPE), "EVTYPE"] <- "heavy rain"
+###High wind
+data[grepl("high", data$EVTYPE) & grepl("wind", data$EVTYPE)
+     & !grepl("marine", data$EVTYPE), "EVTYPE"] <- "high wind"
+###Strong wind
+data[grepl("wind", data$EVTYPE) & !grepl("marine|^thunderstorm wind|^cold/wind chill|
+                                         ^extreme cold/wind chill", data$EVTYPE), 
+                                          "EVTYPE"] <- "strong wind"
+data[grepl("microburst|micoburst|downburst", data$EVTYPE), "EVTYPE"] <- "strong wind"
+###Hurricane/typhoon
+data[grepl("hurricane", data$EVTYPE) | grepl("typhoon", data$EVTYPE), "EVTYPE"] <- "hurricane/typhoon"
+###Tornado
+data[grepl("tornado|torndao", data$EVTYPE), "EVTYPE"] <- "tornado"
+###Lightning
+data[grepl("lighting|lightning|ligntning", data$EVTYPE), "EVTYPE"] <- "lightning"
+###Waterspout
+data[grep("wayterspout", data$EVTYPE), "EVTYPE"] <- "waterspout"
+###Tropical storm
+data[grepl("tropical", data$EVTYPE) & grepl("storm", data$EVTYPE), "EVTYPE"] <- "tropical storm"
+###Volcanic ash
+data[grep("volcanic", data$EVTYPE), "EVTYPE"] <- "volcanic ash"
+###Rip current
+data[grep("rip currents", data$EVTYPE), "EVTYPE"] <- "rip current"
+###Wildfire
+data[grep("fire", data$EVTYPE), "EVTYPE"] <- "wildfire"
+###Storm surge/tide
+data[grep("^surge$", data$EVTYPE), "EVTYPE"] <- "storm sturge/tide"
+data[grep("^storm surge$", data$EVTYPE), "EVTYPE"] <- "storm sturge/tide"
+```
+
+Additionally, an "unknown/other" weather event category was created for ambiguous 
+events that could not be classified.
+
+```{r, echo=TRUE, cache=TRUE}
+###Unknown/other
+data[!grepl("^astronomical low tide$|^avalanche$|^blizzard$|^blow-out tides$|
+^coastal storm$|^cold/wind chill$|^debris flow$|^dense fog$|^dense smoke$|^drought$|
+^dust devil$|^dust storm$|^excessive heat$|^extreme cold/wind chill$|^flash flood$|
+^flood|^fog$|^freezing fog$|^frost/freeze$|^funnel cloud$|^hail$|^heat$|^heavy rain|
+^heavy snow$|^high surf$|^high tides$|^hurricane/typhoon$|^ice storm$|^lakeshore flood|
+^lightning$|^marine high wind|^marine strong wind$|^marine thunderstorm wind$|
+^rip current$|^seiche$|^sleet$|^strong wind$|^storm surge/tide$|^thunderstorm wind$|
+^tropical depression$|^tropical storm$|^tsunami$|^volcanic ash$|^waterspout$|
+^wildfire$|^winter storm$|^winter weather$|^tornado$", data$EVTYPE), "EVTYPE"] <- "unknown/other"
+```
+
+The "unknown/other" weather event category was excluded from the analysis because 
+it was not a meaningful category.
+
+```{r, echo=TRUE}
+data <- subset(data, EVTYPE != "unknown/other")
+```
+
+## Preparing counts of fatalities and injuries
+
+Total counts of fatalities (FATALITIES) and injuries (INJURIES) were calculated 
+each type of weather event (EVTYPE).
+
+```{r, echo=TRUE}
+injuries <- with(data, aggregate(INJURIES ~ EVTYPE, FUN = sum))
+fatalities <- with(data, aggregate(FATALITIES ~ EVTYPE, FUN = sum))
+```
+
+Data were sorted in descending order by the counts of fatalities and injuries.
+
+```{r, echo = TRUE}
+injsort <- injuries[order(-injuries$INJURIES),]
+fatalsort <- fatalities[order(-fatalities$FATALITIES),]
+```
+
+Created subsets of the 10 weather events with the highest number of fatalities 
+and injuries.
+
+```{r, echo=TRUE}
+topinj <- injsort[1:10,]
+topfatal <- fatalsort[1:10,]
+```
+
+
+## Prepare estimates of property and crop damage
+
+Property and crop damage exponents (i.e., PROPDMGEXP and CROPDMGEXP) were re-factored.
+Exponents of '-', '?', and '+' were excluded because there was not any information 
+in the data documentation about how to treat these values.
+
+```{r, echo=TRUE}
+##Property Damage
+data$PROPEXP[data$PROPDMGEXP == "B"] <- 1000000000
+data$PROPEXP[data$PROPDMGEXP == "8"] <- 1000000000
+data$PROPEXP[data$PROPDMGEXP == "7"] <- 100000000
+data$PROPEXP[data$PROPDMGEXP == "M"] <- 1000000
+data$PROPEXP[data$PROPDMGEXP == "m"] <- 1000000
+data$PROPEXP[data$PROPDMGEXP == "6"] <- 10000000
+data$PROPEXP[data$PROPDMGEXP == "5"] <- 1000000
+data$PROPEXP[data$PROPDMGEXP == "4"] <- 100000
+data$PROPEXP[data$PROPDMGEXP == "K"] <- 1000
+data$PROPEXP[data$PROPDMGEXP == "k"] <- 1000
+data$PROPEXP[data$PROPDMGEXP == "3"] <- 10000
+data$PROPEXP[data$PROPDMGEXP == "H"] <- 100
+data$PROPEXP[data$PROPDMGEXP == "h"] <- 100
+data$PROPEXP[data$PROPDMGEXP == "2"] <- 1000
+data$PROPEXP[data$PROPDMGEXP == "1"] <- 100
+data$PROPEXP[data$PROPDMGEXP == "0"] <- 10
+data$PROPEXP[data$PROPDMGEXP == ""] <- 1
+
+##Crop Damage
+data$CROPEXP[data$CROPDMGEXP == "B"] <- 1000000000
+data$CROPEXP[data$CROPDMGEXP == "M"] <- 1000000
+data$CROPEXP[data$CROPDMGEXP == "m"] <- 1000000
+data$CROPEXP[data$CROPDMGEXP == "K"] <- 1000
+data$CROPEXP[data$CROPDMGEXP == "k"] <- 1000
+data$CROPEXP[data$CROPDMGEXP == "2"] <- 1000
+data$CROPEXP[data$CROPDMGEXP == "0"] <- 10
+data$CROPEXP[data$CROPDMGEXP == ""] <- 1
+```
+
+Property and crop damage amounts (i.e., PROPDMG and CROPDMG) were multiplied by
+the newly factored variables: PROPEXP and CROPEXP
+
+```{r, echo=TRUE}
+##Property Damage
+data$PROPDMGAMT <- data$PROPEXP * data$PROPDMG
+
+##Crop Damage
+data$CROPDMGAMT <- data$CROPEXP * data$CROPDMG
+```
+
+A 'total damage' measure was calculated by adding property and crop damage amounts.
+
+```{r, echo=TRUE}
+##Total Damage Amount
+data$TOTDMG <- data$PROPDMGAMT + data$CROPDMGAMT
+```
+
+Damage amounts were aggregated for each type of weather event.
+
+```{r, echo=TRUE}
+##Property Damage by EVTYPE
+propdmg <- with(data, aggregate(PROPDMGAMT ~ EVTYPE, FUN = sum))
+##Crop Damage by EVTYPE
+cropdmg <- with(data, aggregate(CROPDMGAMT ~ EVTYPE, FUN = sum))
+##Total Damage by EVTYPE
+totdmg <- with(data, aggregate(TOTDMG ~ EVTYPE, FUN = sum))
+```
+
+Total damage (property and crop, combined) was sorted in descending order by 
+damage amount and a subset of the 5 weather events with the greatest amount damage.
+
+```{r, echo=TRUE}
+##Sort by total damage amount
+totdmgsort <- totdmg[order(-totdmg$TOTDMG),]
+##Create a subset of the top 5 weather events causing damages
+totdmg5 <- totdmgsort[1:5,]
+```
+
+Property and crop damage amounts were added to the data frame containing the 5 
+weather events causing the great amount of total damage.
+
+```{r, echo=TRUE}
+alldmg <- merge(x=totdmg5, y=cropdmg, by = "EVTYPE")
+alldmg <- merge(x=alldmg, y=propdmg, by = "EVTYPE")
+```
+
+The data frame was then converted to long format using the melt() function of the
+reshape2 package.
+
+```{r, echo=TRUE}
+alldmg <- melt(alldmg, id="EVTYPE")
+```
+
+The variable identifying the type of damage amount was converted to a factor 
+variable to set the order of the bars when plotting 
+
+```{r, echo=TRUE}
+alldmg$variable <- factor(alldmg$variable, levels = c("TOTDMG", "PROPDMGAMT", "CROPDMGAMT"))
+```
+
+## Results
+
+## 1. Across the United States, which types of events are most harmful with respect to population health?
+
+Plotted the top 10 weather events causing injuries using ggplot2.
+
+```{r, echo=TRUE}
+ggplot(data = topinj, aes(x = reorder(EVTYPE, INJURIES), y = INJURIES)) + geom_bar(stat = "identity") +
+  coord_flip() + xlab("Event Type") + ylab("Number of injuries") + ggtitle("Number of injuries by weather events in the US: 1950 - 2011")
+```
+
+Plotted the top 10 weather events causing fatalities using ggplot2.
+
+```{r, echo=TRUE}
+ggplot(data = topfatal, aes(x = reorder(EVTYPE, FATALITIES), y = FATALITIES)) + geom_bar(stat = "identity") +
+  coord_flip() + xlab("Event Type") + ylab("Number of fatalities") + ggtitle("Number of fatalities by weather events in the US: 1950 - 2011")
+```
+
+As seen in the figures above, tornadoes had the biggest impact on public health 
+with the greatest number of fatalities and injuries. Between 1950 and 2011, tornado 
+caused 5,633 fatalities and 91,364 injuries. Counts of fatalities and injuries 
+for the top 10 weather events are available in the tables below.
+
+```{r, echo=TRUE}
+print(topfatal)
+print(topinj)
+```
+
+## 2. Across the United States, which types of events have the greatest economic consequences?
+
+Plotted property and crop damage amounts for the top 5 weather events with the 
+greatest amount of damages (property and crop, combined) using ggplot2
+
+```{r, echo=TRUE}
+ggplot(data = alldmg, aes(x = reorder(EVTYPE, -value), y = value, fill = variable)) + 
+  geom_bar(stat = "identity", position = "dodge") + xlab("Event type") + 
+  ylab("Amount of damage") + ggtitle("Economic consequences of weather events in the US: 1950 - 2011") +
+  scale_fill_discrete(name="Damage type", labels = c("Total", "Property", "Crop"))
+```
+
+Overall, hurricanes/typhoons had the greatest economic consequences between 1950
+and 2011 with about 90 billion in total damages (property and crop damage, combined). 
+Since property damage represents a large majority of the proportion of total damages, 
+10 weather events with the greatest amount of crop damage are listed in the table 
+below.
+
+```{r, echo=TRUE}
+propdmg <- propdmg[order(-propdmg$PROPDMGAMT),]
+propdmg[1:10,]
+```
+
+Weather events with the greatest amount of property damage are listed in the table 
+below.
+
+```{r, echo=TRUE}
+cropdmg <- cropdmg[order(-cropdmg$CROPDMGAMT),]
+cropdmg[1:10,]
+```
+
+**NOTE:** Property and crop damage amounts should be considered a broad estimate 
+as the National Weather Service makes these estimates using all available data at 
+the time of publication.
